@@ -224,7 +224,7 @@ end
 cell_vecs(at::Atoms) = at.cell[1,:], at.cell[2,:], at.cell[3,:]
 
 
-function neighbourlist(at::Atoms{T}, cutoff::T; recompute=false, kwargs...) where T <: AbstractFloat
+function neighbourlist(at::Atoms{T}, cutoff::T; recompute=false, kwargs...) where {T <: AbstractFloat}
    # TODO: re-design this from scratch . . .
    PairList(positions(at), cutoff, cell(at), pbc(at); kwargs...)
    # if !has_data(at, (:nlist, cutoff)) || recompute
