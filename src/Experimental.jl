@@ -150,7 +150,7 @@ end
 function energy_inner(V::FastLJ, X, i, j)
     E = 0.0
     for n = 1:length(i)
-        r2 = sum(abs2, X[i[n]]-X[j[n]])
+        @inbounds r2 = sum(abs2, X[i[n]]-X[j[n]])
         # evaluate LJ
         r2inv = (V.r0*V.r0)/r2
         r4inv = r2inv * r2inv
@@ -160,10 +160,41 @@ function energy_inner(V::FastLJ, X, i, j)
         # evaluate a cutoff
         lj2 = lj1 - V.fcut - V.dfcut * (r2 - V.rcut2)
         lj3 = lj2 * (r2 < V.rcut2)
-        E += lj3
+        E += 0.5 * lj3
     end
     return E
 end
+
+forces(V::FastLJ, at::Atoms{Float64, Int}) =
+    forces!(zeros(JVecF, length(at)), V, at)
+
+function forces!(F, V::FastLJ, at::Atoms{Float64, Int})
+    i, j = update!(V, at)
+    return forces_inner!(F, V, at.X, i, j)
+end
+
+function forces_inner!(F, V::FastLJ, X, i, j)
+    @assert length(F) == length(X)
+    r02inv = 1.0 / V.r0^2
+    for n = 1:length(i)
+        R = X[i[n]]-X[j[n]]
+        r2 = sum(abs2, R)
+        r = sqrt(r2)
+        # evaluate LJ
+        r2inv = (V.r0*V.r0)/r2
+        r4inv = r2inv * r2inv
+        r6inv = r2inv * r4inv
+        r8inv = r4inv * r4inv
+        r14inv = r8inv * r6inv
+        dlj1 = (6 * r02inv) * ( - r14inv + r8inv)
+        # evaluate a cutoff
+        dlj2 = (dlj1 - V.dfcut) * (r2 < V.rcut2)
+        F[i[n]] -= dlj2 * R
+        F[j[n]] += dlj2 * R
+    end
+    return F
+end
+
 
 
 
