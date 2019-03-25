@@ -204,8 +204,9 @@ function estimate_energyscale(at, P)
    f0 = forces(at) |> mat
    # compute gradient at perturbed positions
    h = 1e-3
-   set_positions!(at, X0 + h * V)
-   f1 = forces(at) |> mat
+   at_temp = deepcopy(at)
+   set_positions!(at_temp, X0 + h * V)
+   f1 = forces(at_temp) |> mat
    # return the estimated value for the energyscale
    V = mat(V)
    μ = - vecdot((f1 - f0)/h, V) / dot(A * V[:], V[:])
