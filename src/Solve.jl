@@ -110,6 +110,8 @@ function minimise!(at::AbstractAtoms;
       end
    end
 
+   # try 
+
    # choose the optimisation method Optim.jl
    if method == :auto || method == :cg
       if isa(precond, Identity)
