@@ -4,7 +4,7 @@ module Preconditioners
 using JuLIP: AbstractAtoms, Preconditioner, JVecs, JVecsF, Dofs, maxdist,
             constraint, pairs, cutoff, positions, defm, JVecF, forces, mat, vecs,
             set_positions!, julipwarn, chemical_symbols, rnn, JVec, JMat ,
-            AbstractCalculator, calculator
+            AbstractCalculator, calculator, cutoff
 
 using JuLIP.Potentials: @analytic, evaluate, evaluate_d, PairPotential, HS,
          SitePotential, sites, C0Shift, _precon_or_hessian_pos
@@ -64,7 +64,7 @@ end
 
 
 function IPPrecon(p::AbstractCalculator, at::AbstractAtoms;
-         updatedist=0.2 * rnn(at), tol=1e-7, updatefreq=10, stab=0.01,
+         updatedist=0.2 * cutoff(at), tol=1e-7, updatefreq=10, stab=0.01,
          solver = :chol, innerstab=0.0)
    # make sure we don't use this in a context it is not intended for!
    @assert isa(constraint(at), FixedCell)
@@ -174,7 +174,7 @@ cutoff(P::Exp) = cutoff(P.Vexp)
 precon{T}(P::Exp{T}, r, R, innerstab) = (P.energyscale * P.Vexp(r)) * one(JMat{T})
 
 function Exp(at::AbstractAtoms;
-             A=3.0, r0=rnn(at), cutoff_mult=2.2, energyscale = 1.0,
+             A=3.0, r0=cutoff(at), cutoff_mult=2.2, energyscale = 1.0,
              kwargs...)
    e0 = energyscale == :auto ? 1.0 : energyscale
    rcut = r0 * cutoff_mult
