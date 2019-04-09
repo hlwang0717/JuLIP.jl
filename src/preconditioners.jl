@@ -64,7 +64,7 @@ end
 
 
 function IPPrecon(p::AbstractCalculator, at::AbstractAtoms;
-         updatedist=0.2 * cutoff(at), tol=1e-7, updatefreq=10, stab=0.01,
+         updatedist=0.2 * cutoff(at), tol=1e-7, updatefreq=100, stab=0.01,
          solver = :chol, innerstab=0.0)
    # make sure we don't use this in a context it is not intended for!
    @assert isa(constraint(at), FixedCell)
@@ -174,7 +174,7 @@ cutoff(P::Exp) = cutoff(P.Vexp)
 precon{T}(P::Exp{T}, r, R, innerstab) = (P.energyscale * P.Vexp(r)) * one(JMat{T})
 
 function Exp(at::AbstractAtoms;
-             A=3.0, r0=cutoff(at), cutoff_mult=2.2, energyscale = 1.0,
+             A=3.0, r0=cutoff(at), cutoff_mult=1.1, energyscale = 1.0,
              kwargs...)
    e0 = energyscale == :auto ? 1.0 : energyscale
    rcut = r0 * cutoff_mult
