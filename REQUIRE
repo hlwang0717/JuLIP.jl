@@ -1,13 +1,15 @@
-julia 0.6 0.7-
+julia 0.7
 StaticArrays
-Optim 0.14
-Calculus 0.2 0.3-
-AMG
+Optim
+Calculus
+AlgebraicMultigrid
 JSON
 Reexport
 FunctionWrappers
-Dierckx 0.3 0.4-
-ForwardDiff 0.4
+Dierckx
+ForwardDiff
 Parameters
-NeighbourLists 0.2
+NeighbourLists 0.3
 MacroTools
+LineSearches
+CommonSubexpressions

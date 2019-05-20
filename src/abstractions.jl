@@ -1,3 +1,4 @@
+using LinearAlgebra: det
 
 # here we define and document the prototypes that are implemented
 
@@ -113,7 +114,10 @@ export AbstractAtoms,
       defm, set_defm!
 
 # length is used for several things
-import Base: length, A_ldiv_B!, A_mul_B!, gradient
+import Base: length
+
+using LinearAlgebra
+import LinearAlgebra: ldiv!, mul!
 
 export AbstractCalculator,
       energy, potential_energy, forces, gradient, hessian,
@@ -147,7 +151,7 @@ get_positions = positions
 "Set positions of all atoms"
 @protofun set_positions!(::AbstractAtoms, ::Any)
 
-set_positions!(at::AbstractAtoms, p::Matrix) = set_positions!(at, vecs(p))
+set_positions!(at::AbstractAtoms, p::AbstractMatrix) = set_positions!(at, vecs(p))
 set_positions!(at::AbstractAtoms, x, y, z) = set_positions!(at, [x'; y'; z'])
 
 xyz(at::AbstractAtoms) = xyz(positions(at))
@@ -162,7 +166,7 @@ get_momenta = momenta
 "Set momenta of all atoms as a `3 x N` array."
 @protofun set_momenta!(::AbstractAtoms, ::Any)
 
-set_momenta!(at::AbstractAtoms, p::Matrix) = set_momenta!(at, vecs(p))
+set_momenta!(at::AbstractAtoms, p::AbstractMatrix) = set_momenta!(at, vecs(p))
 
 @protofun masses(::AbstractAtoms)
 get_masses = masses
@@ -326,7 +330,7 @@ be allowed to be either a scalar or a vector.
 #     CALCULATOR
 #######################################################################
 
-type  NullCalculator <: AbstractCalculator end
+mutable struct  NullCalculator <: AbstractCalculator end
 
 "Returns the cut-off radius of the potential."
 @protofun cutoff(::AbstractCalculator)
@@ -406,7 +410,7 @@ stress(at::AbstractAtoms) = stress(calculator(at), at)
 #  Constraints and DoF Handling
 #######################################################################
 
-type NullConstraint <: AbstractConstraint end
+mutable struct NullConstraint <: AbstractConstraint end
 
 """
 `position_dofs(at::AbstractAtoms, cons::AbstractConstraint) -> Dofs`
@@ -531,11 +535,11 @@ update!(precond::Preconditioner, at::AbstractAtoms, x::Dofs) =
 """
 Identity preconditioner, i.e., no preconditioner.
 """
-type Identity <: Preconditioner
+mutable struct Identity <: Preconditioner
 end
 
-A_ldiv_B!(out::Dofs, P::Identity, x::Dofs) = copy!(out, x)
-A_mul_B!(out::Dofs, P::Identity, f::Dofs) = copy!(out, f)
+ldiv!(out::Dofs, P::Identity, x::Dofs) = copyto!(out, x)
+mul!(out::Dofs, P::Identity, f::Dofs) = copyto!(out, f)
 update!(P::Identity, at::AbstractAtoms) = P
 
 

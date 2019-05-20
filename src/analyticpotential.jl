@@ -3,6 +3,7 @@ using MacroTools: @capture, prewalk
 using Calculus: differentiate
 
 export AnalyticFunction, @analytic
+using CommonSubexpressions
 
 import FunctionWrappers
 import FunctionWrappers: FunctionWrapper
@@ -20,9 +21,15 @@ const F64fun = ScalarFun{Float64}
 take an expression of the form `r -> f(r)` and return the expression
 `r -> f'(r)`
 """
-function fdiff( ex )
+function fdiff( ex, ndiff )
+   @assert 1 <= ndiff <= 2
    @assert @capture(ex, var_ -> expr_)
-   return :(  $var -> $(differentiate(expr.args[2], var)) )
+   d_ex = differentiate(expr.args[2], var)
+   if ndiff == 2
+      d_ex = differentiate(d_ex, var)
+   end
+   d_ex = CommonSubexpressions.cse(d_ex)
+   return :(  $var -> $d_ex )
 end
 
 """
@@ -39,13 +46,6 @@ function substitute(args)
 end
 
 # ================== Analytical Potentials ==========================
-
-# documentation attached below
-@pot struct AnalyticFunction{F0,F1,F2} <: PairPotential
-   f::F0
-   f_d::F1
-   f_dd::F2
-end
 
 """
 `struct AnalyticFunction`: described an analytic function, allowing to
@@ -75,7 +75,13 @@ V = @analytic( r -> exp(s) * s, s = r^2 )
 V = @analytic r -> exp(r^2) * r^2
 ```
 """
-AnalyticFunction
+struct AnalyticFunction{F0,F1,F2} <: PairPotential
+   f::F0
+   f_d::F1
+   f_dd::F2
+end
+
+@pot AnalyticFunction
 
 const WrappedAnalyticFunction = AnalyticFunction{F64fun, F64fun, F64fun}
 
@@ -96,8 +102,8 @@ macro analytic(args...)
    quote
       AnalyticFunction(
         $(Base.FastMath.make_fastmath(esc(fexpr))),
-        $(Base.FastMath.make_fastmath(esc(fdiff(fexpr)))),
-        $(Base.FastMath.make_fastmath(esc(fdiff(fdiff(fexpr)))))
+        $(Base.FastMath.make_fastmath(esc(fdiff(fexpr, 1)))),
+        $(Base.FastMath.make_fastmath(esc(fdiff(fexpr, 2))))
       )
    end
 end

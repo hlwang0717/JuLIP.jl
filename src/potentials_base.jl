@@ -27,11 +27,11 @@ for `evaluate, evaluate_d, evaluate_dd, grad`.
 
 For example, the declaration
 ```julia
-@pot type LennardJones <: PairPotential
+"documentation for `LennardJones`"
+mutable struct LennardJones <: PairPotential
    r0::Float64
 end
-"documentation for `LennardJones`"
-LennardJones
+@pot LennardJones
 ```
 creates the following aliases:
 ```julia
@@ -46,28 +46,17 @@ Usage of `@pot` is not restricted to pair potentials, but can be applied to
 *any* type.
 """
 macro pot(fsig)
-   @assert fsig.head == :type
-   tname, tparams = t_info(fsig.args[2])
-   # isa(tname, Symbol) ? name_only = tname : name_only = tname.args[1]
-   # @show name_only
-   tname = esc(tname)
-   for n = 1:length(tparams)
-      tparams[n] = esc(tparams[n])
-   end
+   @assert fsig isa Symbol
    sym = esc(:x)
+   tsym = esc(fsig)
    quote
-      $(esc(fsig))
-      # Docs.@__doc__ $(name_only)
-      @inline ($sym::$tname){$(tparams...)}(args...) = evaluate($sym, args...)
-      @inline ($sym::$tname){$(tparams...)}(::Type{Val{:D}}, args...) = evaluate_d($sym, args...)
-      @inline ($sym::$tname){$(tparams...)}(::Type{Val{:DD}}, args...) = evaluate_dd($sym, args...)
-      @inline ($sym::$tname){$(tparams...)}(::Type{Val{:GRAD}}, args...) = grad($sym, args...)
+      @inline ($sym::$tsym)(args...) = evaluate($sym, args...)
+      @inline ($sym::$tsym)(::Type{Val{:D}}, args...) = evaluate_d($sym, args...)
+      @inline ($sym::$tsym)(::Type{Val{:DD}}, args...) = evaluate_dd($sym, args...)
+      @inline ($sym::$tsym)(::Type{Val{:GRAD}}, args...) = grad($sym, args...)
    end
 end
 
-# t_info extracts type name as symbol and type parameters as an array
-t_info(ex::Symbol) = (ex, tuple())
-t_info(ex::Expr) = ex.head == :(<:) ? t_info(ex.args[1]) : (ex, ex.args[2:end])
 
 # --------------------------------------------------------------------------
 
@@ -117,13 +106,13 @@ end
 # ==================================
 #   Basic Potential Arithmetic
 
-@pot type SumPot{P1, P2} <: PairPotential
+"sum of two pair potentials"
+mutable struct SumPot{P1, P2} <: PairPotential
    p1::P1
    p2::P2
 end
 
-# "sum of two pair potentials"
-# SumPot
+@pot SumPot
 
 import Base.+
 +(p1::PairPotential, p2::PairPotential) = SumPot(p1, p2)
@@ -136,12 +125,13 @@ function Base.show(io::Base.IO, p::SumPot)
    print(io, p.p2)
 end
 
-@pot type ProdPot{P1, P2} <: PairPotential
+"product of two pair potentials"
+mutable struct ProdPot{P1, P2} <: PairPotential
    p1::P1
    p2::P2
 end
-"product of two pair potentials"
-ProdPot
+
+@pot ProdPot
 import Base.*
 *(p1::PairPotential, p2::PairPotential) = ProdPot(p1, p2)
 @inline evaluate(p::ProdPot, r) = p.p1(r) * p.p2(r)
@@ -160,5 +150,5 @@ end
 #       basically, we want to allow that
 #       a pair potential can depend on direction as well!
 #       in this case, @D is already the gradient and @GRAD remaind undefined?
-evaluate{P1,P2}(p::ProdPot{P1,P2}, r, R) = p.p1(r, R) * p.p2(r, R)
+evaluate(p::ProdPot{P1,P2}, r, R) where {P1,P2} = p.p1(r, R) * p.p2(r, R)
 evaluate_d(p::ProdPot, r, R) = p.p1(r,R) * (@D p.p2(r,R)) + (@D p.p1(r,R)) * p.p2(r,R)

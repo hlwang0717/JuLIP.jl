@@ -10,13 +10,6 @@ export ADPotential
 # Implementation of a ForwardDiff site potential
 # ================================================
 
-@pot struct ADPotential{TV, T, FR} <: SitePotential
-   V::TV
-   rcut::T
-   gradfun::FR
-end
-
-
 """
 `abstract FDPotential <: SitePotential`
 
@@ -25,9 +18,10 @@ a concrete type and overload `JuLIP.Potentials.ad_evaluate`.
 
 Example
 ```julia
-@pot type P1 <: FDPotential
+mutable struct P1 <: FDPotential
 end
-JuLIP.Potentials.ad_evaluate{T<:Real}(pot::P1, R::Matrix{T}) =
+@pot P1
+JuLIP.Potentials.ad_evaluate(pot::P1, R::Matrix{T}) where {T<:Real} =
                sum( exp(-norm(R[:,i])) for i = 1:size(R,2) )
 ```
 
@@ -38,7 +32,13 @@ Notes:
 `ForwardDiff`. Hopefully it can be fixed.
 * TODO: allow arguments `(r, R)` then use chain-rule to combine them.
 """
-ADPotential
+struct ADPotential{TV, T, FR} <: SitePotential
+   V::TV
+   rcut::T
+   gradfun::FR
+end
+
+@pot ADPotential
 
 ADPotential(V, rcut) = ADPotential(V, rcut, ForwardDiff.gradient)
 
@@ -50,7 +50,7 @@ evaluate(V::ADPotential, r, R) = V.V(R)
 #    ForwardDiff.gradient( S -> V.V(vecs(S)), mat(R)[:] ) |> vecs
 
 evaluate_d(V::ADPotential, r, R) =
-   V.gradfun( S -> V.V(vecs(S)), mat(R)[:] ) |> vecs
+   V.gradfun( S -> V.V(vecs(S)), collect(mat(R)[:]) ) |> vecs |> collect
 
 # function evaluate_dd(V::ADPotential, r, R)
 #

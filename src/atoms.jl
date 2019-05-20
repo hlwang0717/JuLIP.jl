@@ -76,14 +76,14 @@ TODO
 * `get_data`, `set_data!`
 """
 @with_kw mutable struct Atoms{T <: AbstractFloat, TI <: Integer} <: AbstractAtoms
-   X::Vector{JVec{T}} = JVec{Float64}[]       # positions
-   P::Vector{JVec{T}} = JVec{Float64}[]       # momenta (or velocities?)
-   M::Vector{T} = Float64[]             # masses
+   X::Vector{JVec{T}} = JVec{T}[]       # positions
+   P::Vector{JVec{T}} = JVec{T}[]       # momenta (or velocities?)
+   M::Vector{T} = T[]             # masses
    Z::Vector{TI} = Int[]           # atomic numbers
    cell::JMat{T} = zero(JMat{T})                   # cell
    pbc::JVec{Bool} = JVec(false, false, false)     # boundary condition
-   calc::Union{Void, AbstractCalculator} = nothing
-   cons::Union{Void, AbstractConstraint} = nothing
+   calc::Union{Nothing, AbstractCalculator} = nothing
+   cons::Union{Nothing, AbstractConstraint} = nothing
    data::Dict{Any,JData} = Dict{Any,JData}()
 end
 
@@ -91,18 +91,47 @@ _auto_pbc(pbc::Tuple{Bool, Bool, Bool}) = pbc
 _auto_pbc(pbc::Bool) = (pbc, pbc, pbc)
 _auto_pbc(pbc::AbstractVector) = tuple(pbc...)
 
-_auto_cell(cell) = JMat(cell)
-_auto_cell(C::Vector{Any}) = JMatF([ C[1] C[2] C[3] ])
+_auto_cell(cell) = cell
+_auto_cell(cell::AbstractMatrix) = JMat(cell)
+_auto_cell(C::AbstractVector{T}) where {T <: Real} = (
+   length(C) == 3 ? JMatF(C[1], 0.0, 0.0, 0.0, C[2], 0.0, 0.0, 0.0, C[3]) :
+                    JMatF(C...) )  # (case 2 requires that length(C) == 0
+_auto_cell(C::AbstractVector{T}) where {T <: AbstractVector} = JMatF([ C[1] C[2] C[3] ])
+_auto_cell(C::AbstractVector) = _auto_cell([ c for c in C ])
+
+# if we have no clue about X just return it and see what happens
+_auto_X(X) = X
+# if the elements of X weren't inferred, try to infer before reading
+# TODO: this might lead to a stack overflow!!
+_auto_X(X::AbstractVector) = _auto_X( [x for x in X] )
+# the cases where we know what to do ...
+_auto_X(X::AbstractVector{T}) where {T <: AbstractVector} = [ JVecF(x) for x in X ]
+_auto_X(X::AbstractVector{T}) where {T <: Real} = _auto_V(reshape(X, 3, :))
+_auto_X(X::AbstractMatrix) = (@assert size(X)[1] == 3;
+                              [ JVecF(X[:,n]) for n = 1:size(X,2) ])
+
+_auto_M(M::AbstractVector) = Vector{Float64}(M)
+
+_auto_Z(Z::AbstractVector) = _auto_Z([z for z in Z])
+_auto_Z(Z::Vector{TI}) where {TI <: Integer}  =
+            isconcretetype(TI) ? Z : Vector{Int}(Z)
 
 
 
 Atoms(X, P, M, Z, cell, pbc; calc=NullCalculator(),
       cons = NullConstraint(), data = Dict{Any,JData}()) =
-   Atoms(X, P, M, Z, _auto_cell(cell), _auto_pbc(pbc), calc, cons, data)
+   Atoms(_auto_X(X),
+         _auto_X(P),
+         _auto_M(M),
+         _auto_Z(Z),
+         _auto_cell(cell),
+         _auto_pbc(pbc),
+         calc,
+         cons,
+         data)
 
-Atoms(Z::Vector{TI}, X::Vector{JVec{T}}; kwargs...
-     ) where {TI <: Integer, T <: AbstractFloat} =
-  Atoms(;Z=Z, X=X, P = zeros(JVec{T}, length(X)), M = zeros(length(X)), kwargs...)
+Atoms(Z::Vector{TI}, X::Vector{JVec{T}}; kwargs...) where {TI, T} =
+  Atoms{T, TI}(;Z=Z, X=X, P = zeros(eltype(X), length(X)), M = zeros(length(X)), kwargs...)
 
 # derived properties
 length(at::Atoms) = length(at.X)
@@ -125,21 +154,21 @@ chemical_symbols(at::Atoms) = Chemistry.chemical_symbol.(at.Z)
 
 # ----- setters
 
-function set_positions!(at::Atoms{T}, X::Vector{JVec{T}})  where T
+function set_positions!(at::Atoms{T}, X::AbstractVector{JVec{T}})  where T
    update_data!(at, dist(at, X))
    at.X .= X
    return at
 end
-function set_momenta!(at::Atoms{T}, P::Vector{JVec{T}})  where T
+function set_momenta!(at::Atoms{T}, P::AbstractVector{JVec{T}})  where T
    at.P .= P
    return at
 end
-function set_masses!(at::Atoms{T}, M::Vector{T})  where T
+function set_masses!(at::Atoms{T}, M::AbstractVector{T})  where T
    update_data!(at, Inf)
    at.M .= M
    return at
 end
-function set_numbers!(at::Atoms{T, TI}, Z::Vector{TI}) where T where TI
+function set_numbers!(at::Atoms{T, TI}, Z::AbstractVector{TI}) where {T, TI}
    update_data!(at, Inf)
    at.Z .= Z
    return at
@@ -200,9 +229,9 @@ function isapprox(at1::Atoms{T,TI}, at2::Atoms{T,TI}; tol = sqrt(eps(T))) where 
    p2 = sortperm(X2)
    return (maxdist(at1.X[p1], at2.X[p2]) <= tol) &&
           (maxdist(at1.P[p1], at2.P[p2]) <= tol) # &&
-          (vecnorm(at1.M[p1] - at2.M[p2], Inf) <= tol) &&
+          (norm(at1.M[p1] - at2.M[p2], Inf) <= tol) &&
           (at1.Z[p1] == at2.Z[p2]) &&
-          (vecnorm(at1.cell - at2.cell, Inf) <= tol) &&
+          (norm(at1.cell - at2.cell, Inf) <= tol) &&
           (at1.pbc == at2.pbc) &&
           (at1.calc == at2.calc) &&
           (at1.cons == at2.cons)
@@ -319,34 +348,27 @@ end
 
 
 
-# ------------------------ workaround for JLD bug  ----------------------
-
-_read_X(X) = X
-_read_X(X::Vector{Any}) = [ JVecF(x) for x in X ]
-_read_X(X::Matrix) = [ JVecF(X[:,n]) for n = 1:size(X,2) ]
+# ------------------------ workaround for JLD bugs  ----------------------
 
 
+
+# for the time being we won't store calculators, constraints and data
+# TODO: this should be implemented asap
 Dict(at::Atoms) =
-   Dict( "id"   => "JuLIP.Atoms",
-         "X"    => at.X,
-         "P"    => at.P,
-         "M"    => at.M,
-         "Z"    => at.Z,
-         "cell" => at.cell,
-         "pbc"  => at.pbc,
-         "calc" => nothing,
-         "cons" => nothing,
-         "data" => nothing )
-         # "data" => at.data )
+   Dict( "__id__" => "JuLIP_Atoms",
+         "X"      => at.X,
+         "P"      => at.P,
+         "M"      => at.M,
+         "Z"      => at.Z,
+         "cell"   => at.cell,
+         "pbc"    => at.pbc,
+         "calc"   => nothing,
+         "cons"   => nothing,
+         "data"   => nothing )
 
-Atoms(D::Dict) =
-   Atoms( _read_X(D["X"]),
-          _read_X(D["P"]),
-          Vector{Float64}(D["M"]),
-          Vector{Int}(D["Z"]),
-          D["cell"],
-          D["pbc"] )
+Atoms(D::Dict) = Atoms(D["X"], D["P"], D["M"], D["Z"], D["cell"], D["pbc"])
           # calc = D["calc"],
           # cons = D["cons"],
-          # data = Dict{Any, JData}(),
           # data = D["data"] )
+
+Base.convert(::Val{:JuLIP_Atoms}, D) = Atoms(D)

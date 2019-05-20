@@ -22,20 +22,25 @@ import JuLIP: position_dofs, project!, set_position_dofs!, positions, gradient,
 
 export FixedCell, VariableCell, ExpVariableCell, FixedCell2D, atomdofs
 
+using SparseArrays: SparseMatrixCSC, nnz, sparse, findnz
 
-function zeros_free{T}(n::Integer, x::Vector{T}, free::Vector{Int})
+using LinearAlgebra: rmul!, det
+
+
+function zeros_free(n::Integer, x::Vector{T}, free::Vector{Int}) where T
    z = zeros(T, n)
    z[free] = x
    return z
 end
 
-function insert_free!{T}(p::Array{T}, x::Vector{T}, free::Vector{Int})
+function insert_free!(p::AbstractArray{T}, x::AbstractVector{T},
+                      free::AbstractVector{Int}) where T
    p[free] = x
    return p
 end
 
 # a helper function to get a valid positions array from a dof-vector
-positions{TI<:Integer}(at::AbstractAtoms, ifree::AbstractVector{TI}, dofs::Dofs) =
+positions(at::AbstractAtoms, ifree::AbstractVector{TI}, dofs::Dofs) where {TI<:Integer} =
       insert_free!(positions(at) |> mat, dofs, ifree) |> vecs
 
 
@@ -57,12 +62,12 @@ Set at most one of the kwargs:
 * `clamp` : list of clamped atom indices (not dof indices)
 * `mask` : 3 x N Bool array to specify individual coordinates to be clamped
 """
-type FixedCell <: AbstractConstraint
+mutable struct FixedCell <: AbstractConstraint
    ifree::Vector{Int}
 end
 
 function analyze_mask(at, free, clamp, mask)
-   if length(find((free != nothing, clamp != nothing, mask != nothing))) > 1
+   if length(findall((free != nothing, clamp != nothing, mask != nothing))) > 1
       error("FixedCell: only one of `free`, `clamp`, `mask` may be provided")
    elseif all( (free == nothing, clamp == nothing, mask == nothing) )
       # in this case (default) all atoms are free
@@ -76,11 +81,13 @@ function analyze_mask(at, free, clamp, mask)
    end
    if free != nothing
       # revert to setting mask
-      mask = Matrix{Bool}(3, Nat)
+      mask = Matrix{Bool}(undef, 3, Nat)
       fill!(mask, false)
-      mask[:, free] = true
+      if !isempty(free)
+         mask[:, free] = true
+      end
    end
-   return find(mask[:])
+   return findall(mask[:])
 end
 
 FixedCell(at::AbstractAtoms; clamp = nothing, free=nothing, mask=nothing) =
@@ -106,7 +113,7 @@ project!(at::AbstractAtoms, cons::FixedCell) = at
 project!(cons::FixedCell, A::SparseMatrixCSC) = A[cons.ifree, cons.ifree]
 
 gradient(at::AbstractAtoms, cons::FixedCell) =
-               scale!(mat(forces(at))[cons.ifree], -1.0)
+               rmul!(mat(forces(at))[cons.ifree], -1.0)
 
 energy(at::AbstractAtoms, cons::FixedCell) = energy(at)
 
@@ -173,37 +180,37 @@ end
 #          VARIABLE CELL IMPLEMENTATION
 # ========================================================================
 
-"""
-`VariableCell`: both atom positions and cell shape are free;
-
-**WARNING:** before manipulating the dof-vectors returned by a `VariableCell`
-constraint, read *meaning of dofs* instructions at bottom of help text!
-
-Constructor:
-```julia
-VariableCell(at::AbstractAtoms; free=..., clamp=..., mask=..., fixvolume=false)
-```
-Set at most one of the kwargs:
-* no kwarg: all atoms are free
-* `free` : list of free atom indices (not dof indices)
-* `clamp` : list of clamped atom indices (not dof indices)
-* `mask` : 3 x N Bool array to specify individual coordinates to be clamped
-
-### Meaning of dofs
-
-On call to the constructor, `VariableCell` stored positions and deformation
-`X0, F0`, dofs are understood *relative* to this "initial configuration".
-
-`dofs(at, cons::VariableCell)` returns a vector that represents a pair
-`(Y, F1)` of a displacement and a deformation matrix. These are to be understood
-*relative* to the reference `X0, F0` stored in `cons` as follows:
-* `F = F1`   (the cell is then `F'`)
-* `X = [F1 * (F0 \ y)  for y in Y)]`
-
-One aspect of this definition is that clamped atom positions still change via
-`F`.
-"""
-type VariableCell <: AbstractConstraint
+# """
+# `VariableCell`: both atom positions and cell shape are free;
+#
+# **WARNING:** before manipulating the dof-vectors returned by a `VariableCell`
+# constraint, read *meaning of dofs* instructions at bottom of help text!
+#
+# Constructor:
+# ```julia
+# VariableCell(at::AbstractAtoms; free=..., clamp=..., mask=..., fixvolume=false)
+# ```
+# Set at most one of the kwargs:
+# * no kwarg: all atoms are free
+# * `free` : list of free atom indices (not dof indices)
+# * `clamp` : list of clamped atom indices (not dof indices)
+# * `mask` : 3 x N Bool array to specify individual coordinates to be clamped
+#
+# ### Meaning of dofs
+#
+# On call to the constructor, `VariableCell` stored positions and deformation
+# `X0, F0`, dofs are understood *relative* to this "initial configuration".
+#
+# `dofs(at, cons::VariableCell)` returns a vector that represents a pair
+# `(Y, F1)` of a displacement and a deformation matrix. These are to be understood
+# *relative* to the reference `X0, F0` stored in `cons` as follows:
+# * `F = F1`   (the cell is then `F'`)
+# * `X = [F1 * (F0 \ y)  for y in Y)]`
+#
+# One aspect of this definition is that clamped atom positions still change via
+# `F`.
+# """
+mutable struct VariableCell <: AbstractConstraint
    ifree::Vector{Int}
    X0::JVecsF
    F0::JMatF
@@ -301,6 +308,6 @@ project!(at::AbstractAtoms, cons::VariableCell) = at
 # include("expcell.jl")
 
 # convenience function to return DoFs associated with a particular atom
-atomdofs(a::AbstractAtoms, I::Integer) = findin(constraint(a).ifree, 3*I-2:3*I)
+atomdofs(a::AbstractAtoms, I::Integer) = findall(in(3*I-2:3*I), constraint(a).ifree)
 
 end # module

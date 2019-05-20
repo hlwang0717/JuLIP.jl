@@ -12,6 +12,8 @@ using JuLIP: JVec, JMat, JVecF, JMatF, JVecsF, mat,
       chemical_symbols, set_cell!, set_pbc!, update_data!,
       set_defm!, defm
 
+using LinearAlgebra: I, Diagonal, isdiag, norm
+
 import Base: union
 
 export repeat, bulk, cluster, autocell!, append
@@ -43,7 +45,7 @@ _simple_structures = [:fcc, :bcc, :diamond]
 function _simple_bulk(sym::Symbol, cubic::Bool)
    if cubic
       X, scal = _cubic_cells[symmetry(sym)]
-      C = eye(3) / scal
+      C = Matrix(1.0I, 3, 3) / scal
    else
       X, C, scal = _unit_cells[symmetry(sym)]
    end
@@ -120,7 +122,7 @@ the use of an orthorhombic unit cell (for now).
  * lift the restriction of single species
  * allow other shapes
 """
-function cluster{T}(atu::Atoms{T}, R::Real; dims = [1,2,3], shape = :ball, x0=nothing)
+function cluster(atu::Atoms{T}, R::Real; dims = [1,2,3], shape = :ball, x0=nothing) where T
    sym = chemical_symbols(atu)[1]
    # check that the cell is orthorombic
    if !isdiag(cell(atu))
@@ -137,9 +139,9 @@ function cluster{T}(atu::Atoms{T}, R::Real; dims = [1,2,3], shape = :ball, x0=no
    L = [ j ∈ dims ? 2 * (ceil(Int, R/Fu[j,j])+3) : 1    for j = 1:3]
    # multiply
    at = Atoms(atu) * L
-   # find point closes to centre
-   x̄ = mean( x[dims] for x in at.X)
-   i0 = findmin( norm(x[dims] - x̄) for x in at.X )[2]
+   # find point closest to centre
+   x̄ = sum( x[dims] for x in at.X ) / length(at.X)
+   i0 = findmin( [norm(x[dims] - x̄) for x in at.X] )[2]
    if x0 == nothing
       x0 = at[i0]
    else
@@ -148,10 +150,10 @@ function cluster{T}(atu::Atoms{T}, R::Real; dims = [1,2,3], shape = :ball, x0=no
    # swap positions
    X = positions(at)
    X[1], X[i0] = X[i0], X[1]
-   F = diagm([Fu[j,j]*L[j] for j = 1:3])
+   F = Diagonal([Fu[j,j]*L[j] for j = 1:3])
    # carve out a cluster with mini-buffer to account for round-off
    r = [ norm(x[dims] - x0[dims]) for x in X ]
-   IR = find( r .<= R+sqrt(eps(T)) )
+   IR = findall( r .<= R+sqrt(eps(T)) )
    # generate new positions
    Xcluster = X[IR]
    # generate the cluster
@@ -198,21 +200,20 @@ function Base.repeat(at::Atoms, n::NTuple{3})
    M = Base.repeat(M0, outer=nrep)
    Z = Base.repeat(Z0, outer=nrep)
    i = 0
-   for a in CartesianRange( CartesianIndex(1,1,1), CartesianIndex(n...) )
+   for a in CartesianIndices( (1:n[1], 1:n[2], 1:n[3]) )
       b = c1 * (a[1]-1) + c2 * (a[2]-1) + c3 * (a[3]-1)
       X[i+1:i+nat0] = [b+x for x in X0]
       i += nat0
    end
-   return Atoms(X, P, M, Z, JMat(diagm([n...]) * cell(at)), pbc(at))
+   return Atoms(X, P, M, Z, Diagonal(collect(n)) * cell(at), pbc(at))
 end
 
 Base.repeat(at::Atoms, n::Integer) = repeat(at, (n,n,n))
-Base.repeat(at::Atoms, n::AbstractArray) = repeat(at, (n...))
+Base.repeat(at::Atoms, n::AbstractArray) = repeat(at, (n...,))
 
 import Base.*
 *(at::Atoms, n) = repeat(at, n)
 *(n, at::Atoms) = repeat(at, n)
-
 
 
 """
@@ -243,8 +244,8 @@ Atoms(s::Symbol, X::Matrix{Float64}) = Atoms(s, vecs(X))
 
 
 function _autocell(X::Vector{JVec{T}}) where T
-   ext = extrema(mat(X), 2)
-   C = diagm([ e[2] - e[1] + 1.0  for e in ext ][:])
+   ext = extrema(mat(X), dims = (2,))
+   C = Diagonal([ e[2] - e[1] + 1.0  for e in ext ][:])
    return JMat{T}(C)
 end
 

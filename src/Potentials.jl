@@ -26,7 +26,12 @@ using StaticArrays: @SMatrix
 
 using NeighbourLists
 
-import JuLIP: energy, forces, cutoff, virial, hessian_pos, hessian, site_energies
+using LinearAlgebra: norm
+
+using SparseArrays: sparse
+
+import JuLIP: energy, forces, cutoff, virial, hessian_pos, hessian,
+              site_energies, r_sum
 
 export Potential, PairPotential, SitePotential,
      site_energy, site_energy_d, partial_energy, partial_energy_d
@@ -69,7 +74,7 @@ NeighbourLists.pairs(at::AbstractAtoms, rcut::AbstractFloat) =
 site_energies(V::SitePotential, at::AbstractAtoms) =
    Float64[ V(r, R) for (_₁, _₂, r, R) in sites(at, cutoff(V)) ]
 
-energy(V::SitePotential, at::AbstractAtoms) = sum_kbn(site_energies(V, at))
+energy(V::SitePotential, at::AbstractAtoms) = r_sum(site_energies(V, at))
 
 evaluate(V::SitePotential, R::AbstractVector{JVecF}) = evaluate(V, norm.(R), R)
 
@@ -159,15 +164,17 @@ include("splines.jl")
 include("eam.jl")
 # EAM, FinnisSinclair
 
+include("onebody.jl") 
 
 
 export ZeroSitePotential
 
-@pot type ZeroSitePotential <: SitePotential
+"a site potential that just returns zero"
+mutable struct ZeroSitePotential <: SitePotential
 end
 
-"a site potential that just returns zero"
-ZeroSitePotential
+@pot ZeroSitePotential
+
 
 evaluate(p::ZeroSitePotential, r, R) = 0.0
 evaluate_d(p::ZeroSitePotential, r, R) = zeros(r)   # TODO: is this a bug?
@@ -181,7 +188,7 @@ cutoff(::ZeroSitePotential) = 3.0
 If `length(R) = N` and `length(R[i]) = d` then `H` is an N × N `Matrix{SMatrix}` with
 each element a d × d static array.
 """
-function fd_hessian{D,T}(V::SitePotential, R::Vector{SVec{D,T}}, h)
+function fd_hessian(V::SitePotential, R::Vector{SVec{D,T}}, h) where {D,T}
    d = length(R[1])
    N = length(R)
    H = zeros( typeof(@SMatrix zeros(d, d)), N, N )
@@ -193,7 +200,7 @@ end
 
 Fill `H` with the hessian entries; cf `fd_hessian`.
 """
-function fd_hessian!{D,T}(H, V::SitePotential, R::Vector{SVec{D,T}}, h)
+function fd_hessian!(H, V::SitePotential, R::Vector{SVec{D,T}}, h) where {D,T}
    N = length(R)
    # convert R into a long vector and H into a big matrix (same part of memory!)
    Rvec = mat(R)[:]

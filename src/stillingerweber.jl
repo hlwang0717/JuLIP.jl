@@ -24,6 +24,8 @@
 using ForwardDiff
 export StillingerWeber
 
+using LinearAlgebra: dot
+
 # using JuLIP.Potentials: evaluate_dd, @D, @DD
 # import JuLIP.Potentials: evaluate, evaluate_d
 
@@ -47,7 +49,7 @@ function bondangle_d(S1, S2, r1, r2)
    d = dot(S1, S2)
    b1 = (1.0/r1) * S2 - (d/r1) * S1
    b2 = (1.0/r2) * S1 - (d/r2) * S2
-   return (d+1./3.)^2, 2.0*(d+1./3.)*b1, 2.0*(d+1./3.)*b2
+   return (d+1.0/3.0)^2, 2.0*(d+1.0/3.0)*b1, 2.0*(d+1.0/3.0)*b2
 end
 
 
@@ -70,12 +72,6 @@ function bondangle_dd(R1, R2)
 end
 
 
-
-@pot struct StillingerWeber{P1,P2} <: SitePotential
-   V2::P1
-   V3::P2
-end
-
 """
 Stillinger-Weber potential with parameters for Si.
 
@@ -96,7 +92,12 @@ V2(r) = 0.5 * ϵ * A * (B * (r/σ)^(-p) - 1.0) * exp(1.0 / (r/σ - a))
 V3(r) = sqrt(ϵ * λ) * exp(γ / (r/σ - a))
 ```
 """
-StillingerWeber
+struct StillingerWeber{P1,P2} <: SitePotential
+   V2::P1
+   V3::P2
+end
+
+@pot StillingerWeber
 
 cutoff(calc::StillingerWeber) = max(cutoff(calc.V2), cutoff(calc.V3))
 
@@ -216,7 +217,7 @@ function _ad_ddV(V::StillingerWeber, r, R)
    n = length(r)
    hV = zeros(JMatF, n, n)
    for i = 1:n, j = 1:n
-      hV[i, j] = ddV[ ((i-1)*3)+(1:3), ((j-1)*3)+(1:3) ]
+      hV[i, j] = ddV[ ((i-1)*3).+(1:3), ((j-1)*3).+(1:3) ]
    end
    return hV
 end

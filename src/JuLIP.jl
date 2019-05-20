@@ -1,7 +1,6 @@
 
 # JuLIP.jl master file.
 
-__precompile__()
 module JuLIP
 
 # warn("""This is a major breaking change for JuLIP, effectively removing
@@ -24,6 +23,10 @@ include("chemistry.jl")
 
 # the main atoms type
 include("atoms.jl")
+
+# File IO
+include("FIO.jl")
+@reexport using JuLIP.FIO
 
 # how to build some simple domains
 include("build.jl")

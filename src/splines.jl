@@ -9,16 +9,6 @@ import Dierckx
 using Dierckx: Spline1D
 # https://github.com/kbarbary/Dierckx.jl
 
-
-@pot type SplinePairPotential <: PairPotential
-   spl::Spline1D          # The actual spline object
-   rcut::Float64          # cutoff radius (??? could just use spl.t[end] ???)
-   wrk::Vector{Float64}   # a work array for faster evaluation of derivatives
-end
-
-SplinePairPotential(spl::Spline1D) =
-   SplinePairPotential(spl, maximum(spl.t), Vector{Float64}(length(spl.t)))
-
 """
 `type SplinePairPotential`
 
@@ -37,7 +27,17 @@ Keyword arguments:
 * `order = 3`: can use lower or higher order splines (0 <= order <= 5) but only 3 is tested
 * `w = (1.0 + ydat).^(-2)`: this gives relative weights to datapoints to ensure a good in the important regions; the intuition behind the default choice is that is prevents overfitting at very high energies which are not physical anyhow, but ensure that sufficient data points are used in the low energy region.
 """
-SplinePairPotential
+mutable struct SplinePairPotential <: PairPotential
+   spl::Spline1D          # The actual spline object
+   rcut::Float64          # cutoff radius (??? could just use spl.t[end] ???)
+   wrk::Vector{Float64}   # a work array for faster evaluation of derivatives
+end
+
+@pot SplinePairPotential
+
+SplinePairPotential(spl::Spline1D) =
+   SplinePairPotential(spl, maximum(spl.t), Vector{Float64}(undef, length(spl.t)))
+
 
 
 cutoff(V::SplinePairPotential) = V.rcut
@@ -58,14 +58,14 @@ evaluate_dd(V::SplinePairPotential, r) = _deriv(V, r, 2)
 
 
 function SplinePairPotential(xdat, ydat; s = 1e-2, fixcutoff=true, order=3,
-                             w = (1.0 + abs.(ydat)).^(-2))
+                             w = (1.0 .+ abs.(ydat)).^(-2))
    # this creates a "fit" with s determining the balance between smoothness
    # and fitting the data (basically an error bound)
    spl = Spline1D(xdat, ydat; bc = "zero", s = s, k = order, w = w)
    # set the last few spline data-points to 0 to get a guaranteed
    # smooth transition to 0 at the cutoff.
    if fixcutoff
-      spl.c[end-order+1:end] = 0.0
+      spl.c[end-order+1:end] .= 0.0
    end
    return SplinePairPotential(spl)
 end
@@ -87,6 +87,6 @@ end
 
 
 function load_plt(fname::AbstractString)
-   data = readdlm(fname, Float64)
+   data = readdlm(fname, Float64; comments=true)
    return data[:, 1], data[:, 2]
 end

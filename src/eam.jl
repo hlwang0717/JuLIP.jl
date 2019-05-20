@@ -1,17 +1,13 @@
 export EAM
 
 using NeighbourLists
+using DelimitedFiles: readdlm
+using JuLIP: r_sum
+
+using LinearAlgebra: rmul!
 
 # =================== General Single-Species EAM Potential ====================
 # TODO: Alloy potential
-
-@pot struct EAM1{T1, T2, T3, T4} <: SitePotential
-   ϕ::T1    # pair potential
-   ρ::T2    # electron density potential
-   F::T3    # embedding function
-   info::T4
-end
-
 
 """
 `struct EAM1`
@@ -41,7 +37,15 @@ details of how the tabulated values are fitted; see
 
 TODO: implement other file formats.
 """
-EAM1
+struct EAM1{T1, T2, T3, T4} <: SitePotential
+   ϕ::T1    # pair potential
+   ρ::T2    # electron density potential
+   F::T3    # embedding function
+   info::T4
+end
+
+@pot EAM1
+
 
 
 EAM1(ϕ, ρ, F) = EAM1(ϕ, ρ, F, nothing)
@@ -96,7 +100,7 @@ function _hess_(V::EAM1, r, R, fabs, stab=0.0)
    dF = @D V.F(ρ̄)
    ddF = @DD V.F(ρ̄)
    # something to stabilize for the precon version
-   Id = eye(JMatF)
+   Id = one(JMatF)
    # assemble
    for i = 1:length(r)
       for j = 1:length(r)
@@ -146,7 +150,8 @@ end
 # ================= Finnis-Sinclair Potential =======================
 
 
-@pot type FSEmbed end
+mutable struct FSEmbed end
+@pot FSEmbed
 evaluate(V::FSEmbed, ρ̄) = - sqrt(ρ̄)
 evaluate_d(V::FSEmbed, ρ̄) = - 0.5 / sqrt(ρ̄)
 evaluate_dd(V::FSEmbed, ρ̄) = 0.25 * ρ̄^(-3/2)
@@ -218,8 +223,8 @@ function read_fs(fname)
    # all the data
    data = readdlm(f)
    @assert length(data) == Nrho+2*Nr
-   ρ = linspace(0, (Nrho-1)*drho, Nrho)
-   r = linspace(cutoff - (Nr-1)*dr, cutoff, Nr)
+   ρ = range(0, stop=(Nrho-1)*drho, length=Nrho)
+   r = range(cutoff - (Nr-1)*dr, stop=cutoff, length=Nr)
 
    # embedding function
    F = data[1:Nrho]
@@ -285,11 +290,11 @@ export energy_map, forces_map
 using JuLIP:Atoms
 
 energy_map(V::EAM1, at::Atoms) =
-   sum_kbn( maptosites!( (r,R) -> V(r,R),
+   r_sum( maptosites!( (r,R) -> V(r,R),
                          zeros(length(at)),
                          sites(at, cutoff(V)) ) )
 
 forces_map(V::EAM1, at::Atoms) =
-   scale!( maptosites_d!( ((r, R) -> @D V(r, R)),
+   rmul!( maptosites_d!( ((r, R) -> @D V(r, R)),
                           zeros(JVecF, length(at)),
                           sites(at, cutoff(V)) ), -1 )

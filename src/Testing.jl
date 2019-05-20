@@ -14,7 +14,8 @@ using JuLIP: AbstractCalculator, AbstractAtoms, energy, gradient, forces,
          mat, vecs, positions, rattle!, set_dofs!, set_constraint!, set_calculator!
 using JuLIP.Potentials: PairPotential, evaluate, evaluate_d, grad, @D
 using JuLIP.Constraints: FixedCell
-
+using Printf
+using LinearAlgebra: norm
 
 export fdtest, fdtest_hessian
 
@@ -41,7 +42,7 @@ function fdtest(F::Function, dF::Function, x; verbose=true)
          dEh[n] = (F(x) - E) / h
          x[n] -= h
       end
-      push!(errors, vecnorm(dE - dEh, Inf))
+      push!(errors, norm(dE - dEh, Inf))
       @printf(" %1.1e | %4.2e  \n", h, errors[end])
    end
    @printf("---------|----------- \n")
@@ -51,7 +52,7 @@ function fdtest(F::Function, dF::Function, x; verbose=true)
       end
       return true
    else
-      warn("""It seems the finite-difference test has failed, which indicates
+      @warn("""It seems the finite-difference test has failed, which indicates
       that there is an inconsistency between the function and gradient
       evaluation. Please double-check this manually / visually. (It is
       also possible that the function being tested is poorly scaled.)""")
@@ -64,7 +65,7 @@ function fdtest_hessian(F::Function, dF::Function, x; verbose=true)
    errors = Float64[]
    F0 = F(x)
    dF0 = dF(x)
-   dFh = copy(full(dF0))
+   dFh = copy(Matrix(dF0))
    @assert size(dFh) == (length(F0), length(x))
    # loop through finite-difference step-lengths
    @printf("---------|----------- \n")
@@ -77,7 +78,7 @@ function fdtest_hessian(F::Function, dF::Function, x; verbose=true)
          dFh[:, n] = (F(x) - F0) / h
          x[n] -= h
       end
-      push!(errors, vecnorm(dFh - dF0, Inf))
+      push!(errors, norm(dFh - dF0, Inf))
       @printf(" %1.1e | %4.2e  \n", h, errors[end])
    end
    @printf("---------|----------- \n")
@@ -85,7 +86,7 @@ function fdtest_hessian(F::Function, dF::Function, x; verbose=true)
       println("passed")
       return true
    else
-      warn("""It seems the finite-difference test has failed, which indicates
+      @warn("""It seems the finite-difference test has failed, which indicates
             that there is an inconsistency between the function and gradient
             evaluation. Please double-check this manually / visually. (It is
             also possible that the function being tested is poorly scaled.)""")
@@ -109,7 +110,7 @@ function fdtest_R2R(F::Function, dF::Function, x::Vector{Float64};
    for p = 2:11
       h = 0.1^p
       dEh = ([F(t+h) for t in x ] - E) / h
-      push!(errors, vecnorm(dE - dEh, Inf))
+      push!(errors, norm(dE - dEh, Inf))
       if verbose
          @printf(" %1.1e | %4.2e  \n", h, errors[end])
       end
@@ -121,7 +122,7 @@ function fdtest_R2R(F::Function, dF::Function, x::Vector{Float64};
       println("passed")
       return true
    else
-      warn("""is seems the finite-difference test has failed, which indicates
+      @warn("""is seems the finite-difference test has failed, which indicates
             that there is an inconsistency between the function and gradient
             evaluation. Please double-check this manually / visually. (It is
             also possible that the function being tested is poorly scaled.)""")

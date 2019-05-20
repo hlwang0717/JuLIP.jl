@@ -1,8 +1,8 @@
 
-using JuLIP
-using Base.Test
+using JuLIP, Test, Printf
 using JuLIP.Testing
 
+include("aux.jl")
 verbose=true
 
 ## check whether on CI
@@ -11,11 +11,11 @@ notCI = !isCI
 eam_W4 = nothing
 
 ## check whether ASE is available
-hasase = true
+global hasase = true
 try
    import ASE
 catch
-   hasase = false
+   global hasase = false
 end
 
 julip_tests = [
@@ -24,10 +24,11 @@ julip_tests = [
    ("test_build.jl", "Build"),
    ("testanalyticpotential.jl", "Analytic Potential"),
    ("testpotentials.jl", "Potentials"),
-   # ("test_ad.jl", "AD Potentials"),
+   ("test_ad.jl", "AD Potentials"),
    ("testvarcell.jl", "Variable Cell"),
    ("testhessian.jl", "Hessian"),
    ("testsolve.jl", "Solve"),
+   ("test_fio.jl", "File IO"),
 ]
 
 # remove testsolve if on Travis
@@ -39,28 +40,29 @@ end
 
 ## ===== some prototype potentials ======
 print("Loading some interatomic potentials . .")
-data = joinpath(Pkg.dir("JuLIP"), "data") * "/"
+data = joinpath(dirname(pathof(JuLIP)), "..", "data") * "/"
 eam_Fe = JuLIP.Potentials.EAM(data * "pfe.plt", data * "ffe.plt", data * "F_fe.plt")
 print(" .")
 eam_W = JuLIP.Potentials.FinnisSinclair(data*"W-pair-Wang-2014.plt", data*"W-e-dens-Wang-2014.plt")
 print(" .")
+global eam_W4
 try
-   eam_W4 = JuLIP.Potentials.EAM(data * "w_eam4.fs")
+   global eam_W4 = JuLIP.Potentials.EAM(data * "w_eam4.fs")
 catch
-   eam_W4 = nothing
+   global eam_W4 = nothing
 end
 println(" done.")
 
 ##
-println("≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡")
-println("  Starting JuLIP Tests")
-println("≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡")
+h0("Starting JuLIP Tests")
 
 @testset "JuLIP" begin
    for (testfile, testid) in julip_tests
-      println("=======================")
-      println("Testset $(testid)")
-      println("=======================")
+      h1("Testset $(testid)")
       @testset "$(testid)" begin include(testfile); end
    end
 end
+
+
+# TODO:
+# - stillinger-weber => is this not in the hessian tests???
